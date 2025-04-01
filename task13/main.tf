@@ -39,7 +39,10 @@ resource "aws_subnet" "task13_subnets" {
   cidr_block        = cidrsubnet(var.vpc_cidr, 4, each.key)
   availability_zone = data.aws_availability_zones.available.names[each.key % length(data.aws_availability_zones.available.names)]
   map_public_ip_on_launch = each.value.is_public
-  tags = { Name = each.value.name }
+  tags = {
+    Name         = each.value.name
+    subnet_type  = each.value.type
+  }
 }
 
 resource "aws_route_table_association" "task13_rt_assoc" {
@@ -48,15 +51,37 @@ resource "aws_route_table_association" "task13_rt_assoc" {
   route_table_id = aws_route_table.task13_public_rt.id
 }
 
-locals {
-  lb_subnet_ids = [for subnet_index, subnet_info in local.subnets_def : aws_subnet.task13_subnets[subnet_index].id if subnet_info.is_public]
+resource "aws_security_group" "task13_lb_sg" {
+  name        = "task13-loadbalancer-sg"
+  description = "SG for task13 loadbalancer"
+  vpc_id      = aws_vpc.task13_vpc.id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 }
 
 resource "aws_lb" "task13_loadbalancer" {
   name               = "task13-loadbalancer"
+  internal           = false
   load_balancer_type = "application"
-  subnets            = local.lb_subnet_ids
-  security_groups    = []
-  tags               = { Name = "task13-loadbalancer" }
+  security_groups    = [aws_security_group.task13_lb_sg.id]
+  subnets            = [for subnet in aws_subnet.task13_subnets : subnet.id if lookup(subnet.tags, "subnet_type", "") == "loadbalancer"]
+  enable_deletion_protection = false
+  depends_on         = [aws_security_group.task13_lb_sg]
 }
-
