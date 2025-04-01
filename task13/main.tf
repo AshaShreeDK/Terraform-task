@@ -28,17 +28,20 @@ locals {
         name      = format("task13-subnets-%s-%d", subnet_type, subnet_index + 1)
         type      = subnet_type
         is_public = subnet_type == "loadbalancer" ? true : false
+        cidr      = var.subnet_cidrs[subnet_type][subnet_index]
       }
     ]
   ])
 }
 
 resource "aws_subnet" "task13_subnets" {
-  for_each          = { for subnet_index, subnet_info in local.subnets_def : subnet_index => subnet_info }
+  for_each = { for subnet_index, subnet_info in local.subnets_def : subnet_index => subnet_info }
+
   vpc_id            = aws_vpc.task13_vpc.id
-  cidr_block        = cidrsubnet(var.vpc_cidr, 4, each.key)
+  cidr_block        = each.value.cidr
   availability_zone = data.aws_availability_zones.available.names[each.key % length(data.aws_availability_zones.available.names)]
   map_public_ip_on_launch = each.value.is_public
+
   tags = {
     Name         = each.value.name
     subnet_type  = each.value.type
